@@ -1,19 +1,32 @@
 package de.jugda.demo.jenkins.plugins.lottery;
-import hudson.Launcher;
 import hudson.Extension;
-import hudson.util.FormValidation;
-import hudson.model.AbstractBuild;
+import hudson.Launcher;
 import hudson.model.BuildListener;
+import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
-import hudson.tasks.Builder;
 import hudson.tasks.BuildStepDescriptor;
-import net.sf.json.JSONObject;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.QueryParameter;
+import hudson.tasks.Builder;
+import hudson.util.FormValidation;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 import javax.servlet.ServletException;
-import java.io.IOException;
+
+import net.sf.json.JSONObject;
+
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest;
 
 /**
  * Sample {@link Builder}.
@@ -21,44 +34,66 @@ import java.io.IOException;
  * <p>
  * When the user configures the project and enables this builder,
  * {@link DescriptorImpl#newInstance(StaplerRequest)} is invoked
- * and a new {@link HelloWorldBuilder} is created. The created
+ * and a new {@link LotteryBuilder} is created. The created
  * instance is persisted to the project configuration XML by using
- * XStream, so this allows you to use instance fields (like {@link #name})
+ * XStream, so this allows you to use instance fields (like {@link #fileName})
  * to remember the configuration.
  *
  * <p>
  * When a build is performed, the {@link #perform(AbstractBuild, Launcher, BuildListener)}
  * method will be invoked. 
  *
- * @author Kohsuke Kawaguchi
+ * @author Gerd Aschemann
  */
-public class HelloWorldBuilder extends Builder {
+public class LotteryBuilder extends Builder {
 
-    private final String name;
+    private final String fileName;
 
     // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
-    public HelloWorldBuilder(String name) {
-        this.name = name;
+    public LotteryBuilder(String fileName) {
+        this.fileName = fileName;
     }
 
     /**
      * We'll use this from the <tt>config.jelly</tt>.
      */
     public String getName() {
-        return name;
+        return fileName;
     }
 
     @Override
-    public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
+    public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) throws IOException {
         // This is where you 'build' the project.
-        // Since this is a dummy, we just say 'hello world' and call that a build.
 
-        // This also shows how you can consult the global configuration of the builder
-        if (getDescriptor().getUseFrench())
-            listener.getLogger().println("Bonjour, "+name+"!");
-        else
-            listener.getLogger().println("Hello, "+name+"!");
+    	PrintStream logger = listener.getLogger();
+		logger.println("Using attendees file È" + fileName + "Ç!");
+//    	BufferedReader attendeesFile = new BufferedReader(new FileReader(fileName, "ISO-8859-15"));
+		BufferedReader attendeesFile = new BufferedReader(
+				new InputStreamReader(
+						new FileInputStream(fileName
+//								new FileReader(fileName)
+								)
+						, Charset.forName("ISO-8859-15")
+						)
+				);
+    	logger.println("The following people registered for the event:");
+    	List<String> attendeesList = new ArrayList();
+    	String line;
+    	while ((line = attendeesFile.readLine()) != null) {
+    		attendeesList.add(line);
+    	}
+    	attendeesFile.close();
+    	for (String attendee : attendeesList) {
+    		logger.println("\t" + attendee);
+    	}
+    	Random rn = new Random();
+    	int maximum = attendeesList.size();
+    	int winnerNumber = Math.abs(rn.nextInt()) % maximum;
+    	logger.println("Chose #" + winnerNumber + " (out of " + maximum + ")");
+    	String winner = attendeesList.get(winnerNumber);
+    	logger.println("THE WINNER IS: '" + winner + "'");
+    	
         return true;
     }
 
@@ -71,11 +106,11 @@ public class HelloWorldBuilder extends Builder {
     }
 
     /**
-     * Descriptor for {@link HelloWorldBuilder}. Used as a singleton.
+     * Descriptor for {@link LotteryBuilder}. Used as a singleton.
      * The class is marked as public so that it can be accessed from views.
      *
      * <p>
-     * See <tt>src/main/resources/hudson/plugins/hello_world/HelloWorldBuilder/*.jelly</tt>
+     * See <tt>src/main/resources/de/jugda/demo/jenkins/plugins/lottery/LotteryBuilder/*.jelly</tt>
      * for the actual HTML fragment for the configuration screen.
      */
     @Extension // This indicates to Jenkins that this is an implementation of an extension point.
@@ -87,10 +122,9 @@ public class HelloWorldBuilder extends Builder {
          * <p>
          * If you don't want fields to be persisted, use <tt>transient</tt>.
          */
-        private boolean useFrench;
 
         /**
-         * Performs on-the-fly validation of the form field 'name'.
+         * Performs on-the-fly validation of the form field 'fileName'.
          *
          * @param value
          *      This parameter receives the value that the user has typed.
@@ -100,9 +134,13 @@ public class HelloWorldBuilder extends Builder {
         public FormValidation doCheckName(@QueryParameter String value)
                 throws IOException, ServletException {
             if (value.length() == 0)
-                return FormValidation.error("Please set a name");
-            if (value.length() < 4)
-                return FormValidation.warning("Isn't the name too short?");
+                return FormValidation.error("Please set a fileName");
+            if (!value.startsWith("/")) {
+            	return FormValidation.error("FileName should start with an '/'");
+            }
+            if (!new File(value).exists()) {
+            	return FormValidation.error("File Ç" + value + "È does not exist!");
+            }
             return FormValidation.ok();
         }
 
@@ -112,31 +150,18 @@ public class HelloWorldBuilder extends Builder {
         }
 
         /**
-         * This human readable name is used in the configuration screen.
+         * This human readable fileName is used in the configuration screen.
          */
         public String getDisplayName() {
-            return "Say hello world";
+            return "JUG DA Lottery";
         }
 
         @Override
         public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
-            // To persist global configuration information,
-            // set that to properties and call save().
-            useFrench = formData.getBoolean("useFrench");
             // ^Can also use req.bindJSON(this, formData);
             //  (easier when there are many fields; need set* methods for this, like setUseFrench)
             save();
             return super.configure(req,formData);
-        }
-
-        /**
-         * This method returns true if the global configuration says we should speak French.
-         *
-         * The method name is bit awkward because global.jelly calls this method to determine
-         * the initial state of the checkbox by the naming convention.
-         */
-        public boolean getUseFrench() {
-            return useFrench;
         }
     }
 }
