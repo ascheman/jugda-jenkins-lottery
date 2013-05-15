@@ -11,7 +11,6 @@ import hudson.util.FormValidation;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
@@ -63,7 +62,7 @@ public class LotteryBuilder extends Builder {
     }
 
     @Override
-    public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) throws IOException {
+    public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws IOException {
         // This is where you 'build' the project.
 
     	PrintStream logger = listener.getLogger();
@@ -78,7 +77,7 @@ public class LotteryBuilder extends Builder {
 						)
 				);
     	logger.println("The following people registered for the event:");
-    	List<String> attendeesList = new ArrayList();
+    	List<String> attendeesList = new ArrayList<String>();
     	String line;
     	while ((line = attendeesFile.readLine()) != null) {
     		attendeesList.add(line);
